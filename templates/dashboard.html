@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | UFG{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><p class="eyebrow">VISTA GENERAL</p><h1>Dashboard</h1><p class="muted">Resumen de atención y actividad reciente.</p></div>
+  <a class="button secondary" href="{{ url_for('cases') }}">Ver todos los casos <span>→</span></a>
+</header>
+<section class="stats-grid">
+  <article class="stat-card"><span class="stat-icon violet">▤</span><p class="stat-label">Casos registrados</p><strong>{{ stats.total }}</strong><small>Histórico total</small></article>
+  <article class="stat-card"><span class="stat-icon blue">◷</span><p class="stat-label">Recibidos hoy</p><strong>{{ stats.hoy }}</strong><small>Desde medianoche</small></article>
+  <article class="stat-card"><span class="stat-icon orange">◌</span><p class="stat-label">Pendientes</p><strong>{{ stats.pendientes }}</strong><small>Recibido, abierto o escalado</small></article>
+  <article class="stat-card"><span class="stat-icon green">✓</span><p class="stat-label">Con respuesta</p><strong>{{ stats.con_respuesta }}</strong><small>Respuesta guardada en el caso</small></article>
+</section>
+<section class="content-grid">
+  <article class="panel">
+    <div class="panel-heading"><div><h2>Atención por agente</h2><p class="muted">Casos con al menos una ejecución exitosa</p></div><a href="{{ url_for('modules') }}">Administrar agentes →</a></div>
+    {% if agent_stats %}
+    <div class="agent-list">
+      {% for agent in agent_stats %}
+      <div class="agent-row">
+        <div class="agent-avatar">{{ agent.nombre[:1] }}</div>
+        <div class="agent-info"><div class="agent-name">{{ agent.nombre }} <span class="level-tag">Nivel {{ agent.nivel }}</span></div><div class="bar-track"><div class="bar-fill" style="width: {{ (agent.atendidas / max_agent_cases * 100) if max_agent_cases else 0 }}%"></div></div></div>
+        <strong class="agent-count">{{ agent.atendidas }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="empty-state">Todavía no hay agentes configurados.</p>{% endif %}
+  </article>
+  <article class="panel">
+    <div class="panel-heading"><div><h2>Canales</h2><p class="muted">Estado y casos recibidos</p></div><a href="{{ url_for('modules') }}">Ver módulos →</a></div>
+    {% if channel_stats %}
+    <div class="channel-list">
+      {% for channel in channel_stats %}
+      <div class="channel-row"><span class="channel-icon">{{ {'TELEGRAM':'➤','GMAIL':'✉','DISCORD':'◉','WEB':'◎'}.get(channel.codigo, '•') }}</span><div class="channel-info"><strong>{{ channel.nombre }}</strong><small>{{ channel.casos }} casos</small></div><span class="pill {{ 'pill-on' if channel.activo else 'pill-off' }}">{{ 'Activo' if channel.activo else 'Inactivo' }}</span></div>
+      {% endfor %}
+    </div>
+    {% else %}<p class="empty-state">Todavía no hay canales configurados.</p>{% endif %}
+  </article>
+</section>
+<section class="panel recent-panel">
+  <div class="panel-heading"><div><h2>Casos recientes</h2><p class="muted">Últimos mensajes recibidos</p></div><a href="{{ url_for('cases') }}">Ver casos →</a></div>
+  {% if latest_cases %}
+  <div class="table-wrap"><table><thead><tr><th>Estudiante</th><th>Canal</th><th>Categoría</th><th>Prioridad</th><th>Agente</th><th>Estado</th><th>Recibido</th></tr></thead><tbody>
+  {% for case in latest_cases %}<tr>
+    <td><a class="case-link" href="{{ url_for('case_detail', case_id=case.id) }}">{{ case.remitente_nombre or 'Sin nombre' }}<small>{{ case.asunto or case.id|string|truncate(18, true, '…') }}</small></a></td>
+    <td>{{ case.canal }}</td><td>{{ case.categoria }}</td>
+    <td><span class="priority priority-{{ case.prioridad|lower }}">{{ case.prioridad }}</span></td>
+    <td>{{ case.agente_asignado }}</td><td><span class="pill pill-neutral">{{ case.estado }}</span></td>
+    <td>{{ case.recibido_en.strftime('%d/%m/%Y %H:%M') if case.recibido_en else '—' }}</td>
+  </tr>{% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="empty-state">Aún no se han recibido casos.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Iniciar sesión | UFG{% endblock %}
+{% block content %}
+<section class="login-card">
+  <a class="brand login-brand" href="{{ url_for('login') }}"><span class="brand-mark">U</span><span>UFG <small>Atención estudiantil</small></span></a>
+  <p class="eyebrow">PANEL DE ADMINISTRACIÓN</p>
+  <h1>Bienvenido</h1>
+  <p class="muted">Ingresa para revisar y gestionar las consultas.</p>
+  <form method="post" class="stack-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Usuario<input name="username" autocomplete="username" required autofocus></label>
+    <label>Contraseña<input type="password" name="password" autocomplete="current-password" required></label>
+    <button class="button primary full" type="submit">Ingresar al panel</button>
+  </form>
+</section>
+{% endblock %}

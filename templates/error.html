@@ -1,0 +1,3 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} | UFG{% endblock %}
+{% block content %}<section class="panel error-card"><span class="stat-icon orange">!</span><h1>{{ title }}</h1><p class="muted">{{ message }}</p><a class="button secondary" href="{{ url_for('dashboard') }}">Volver al dashboard</a></section>{% endblock %}

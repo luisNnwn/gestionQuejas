@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Caso {{ case.id }} | UFG{% endblock %}
+{% block content %}
+<header class="page-header"><div><a class="back-link" href="{{ url_for('cases') }}">← Volver a casos</a><p class="eyebrow">DETALLE DEL CASO</p><h1>{{ case.asunto or 'Queja sin asunto' }}</h1><p class="muted">{{ case.id }}</p></div><span class="pill pill-neutral">{{ case.estado }}</span></header>
+<section class="detail-grid">
+  <article class="panel detail-main"><div class="panel-heading"><div><h2>Información del caso</h2></div></div>
+    <dl class="detail-list"><dt>Estudiante</dt><dd>{{ case.remitente_nombre or 'Sin nombre' }}</dd><dt>Canal</dt><dd>{{ case.canal }}</dd><dt>Categoría</dt><dd>{{ case.categoria }}</dd><dt>Prioridad</dt><dd><span class="priority priority-{{ case.prioridad|lower }}">{{ case.prioridad }}</span></dd><dt>Agente asignado</dt><dd>{{ case.agente_asignado }}</dd><dt>Recibido</dt><dd>{{ case.recibido_en }}</dd><dt>Última actualización</dt><dd>{{ case.actualizado_en }}</dd></dl>
+    <h3>Mensaje original</h3><p class="message-box">{{ case.mensaje }}</p>
+    <h3>Respuesta registrada</h3><p class="message-box">{{ case.respuesta or 'Todavía no hay una respuesta registrada.' }}</p>
+  </article>
+  <div class="detail-side">
+    <article class="panel"><div class="panel-heading"><div><h2>Actividad de agentes</h2></div></div>
+      {% if executions %}<div class="timeline">{% for item in executions %}<div class="timeline-item"><strong>{{ item.agente_codigo }}</strong><span class="pill {{ 'pill-on' if item.estado|upper in ('OK','COMPLETADO') else 'pill-off' }}">{{ item.estado }}</span><small>{{ item.inicio_en }}</small>{% if item.error %}<p>{{ item.error }}</p>{% endif %}</div>{% endfor %}</div>{% else %}<p class="empty-state">No hay ejecuciones registradas.</p>{% endif %}
+    </article>
+    <article class="panel"><div class="panel-heading"><div><h2>Mensajes</h2></div></div>
+      {% if messages %}<div class="timeline">{% for item in messages %}<div class="timeline-item"><strong>{{ item.direccion }} · {{ item.canal }}</strong><small>{{ item.creado_en }}</small><p>{{ item.contenido }}</p></div>{% endfor %}</div>{% else %}<p class="empty-state">No hay mensajes asociados.</p>{% endif %}
+    </article>
+    <article class="panel"><div class="panel-heading"><div><h2>Eventos</h2></div></div>
+      {% if events %}<div class="timeline">{% for item in events %}<div class="timeline-item"><strong>{{ item.evento }}</strong><small>{{ item.creado_en }}</small><p>{{ item.detalle or '' }}</p></div>{% endfor %}</div>{% else %}<p class="empty-state">No hay eventos registrados.</p>{% endif %}
+    </article>
+  </div>
+</section>
+{% endblock %}

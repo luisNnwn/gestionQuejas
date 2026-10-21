@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}UFG | Gestión de quejas{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  {% if session.get("authenticated") %}
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('dashboard') }}"><span class="brand-mark">U</span><span>UFG <small>Atención estudiantil</small></span></a>
+    <p class="nav-label">GESTIÓN</p>
+    <nav>
+      <a class="{{ 'active' if request.endpoint == 'dashboard' else '' }}" href="{{ url_for('dashboard') }}"><span>▦</span> Dashboard</a>
+      <a class="{{ 'active' if request.endpoint in ('cases', 'case_detail') else '' }}" href="{{ url_for('cases') }}"><span>▤</span> Casos</a>
+      <a class="{{ 'active' if request.endpoint == 'modules' else '' }}" href="{{ url_for('modules') }}"><span>◉</span> Módulos</a>
+    </nav>
+    <div class="sidebar-bottom">
+      <span class="status-dot"></span> Panel operativo
+      <form action="{{ url_for('logout') }}" method="post" class="logout-form">
+        <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token', '') }}">
+        <button type="submit" class="logout-link">Cerrar sesión</button>
+      </form>
+    </div>
+  </aside>
+  {% endif %}
+  <main class="{{ 'main-content' if session.get('authenticated') else 'auth-content' }}">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}<div class="flash-list">{% for category, message in messages %}<div class="flash {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>
