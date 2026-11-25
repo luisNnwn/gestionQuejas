@@ -1,6 +1,9 @@
+import re
 import unittest
+from unittest.mock import MagicMock, patch
 
 from app import create_app
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 class Result:
@@ -18,6 +21,7 @@ class Result:
 class FakeConnection:
     def __init__(self, *args, **kwargs):
         self.executed = []
+        self.users = {}
 
     def __enter__(self):
         return self
@@ -27,6 +31,37 @@ class FakeConnection:
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
+        if "SELECT activo FROM public.usuarios_panel" in query:
+            return Result(next(
+                ({"activo": user["activo"]} for user in self.users.values() if user["id"] == params[0]),
+                None,
+            ))
+        if "SELECT id, username, nombre, password_hash, activo" in query:
+            return Result(self.users.get(params[0]))
+        if "INSERT INTO public.usuarios_panel" in query:
+            username, nombre, password_hash, creado_por = params
+            if username in self.users:
+                return Result()
+            user = {
+                "id": "47e01a6e-8441-4bf3-8e10-3d3f26c86954",
+                "username": username,
+                "nombre": nombre,
+                "password_hash": password_hash,
+                "activo": True,
+                "creado_por": creado_por,
+                "creado_en": None,
+                "ultimo_acceso_en": None,
+            }
+            self.users[username] = user
+            return Result({"id": user["id"]})
+        if "SELECT id, username, nombre, activo, creado_en, ultimo_acceso_en" in query:
+            return Result(rows=list(self.users.values()))
+        if "UPDATE public.usuarios_panel" in query and "SET activo = NOT activo" in query:
+            user = next((user for user in self.users.values() if user["id"] == params[0]), None)
+            if user:
+                user["activo"] = not user["activo"]
+                return Result({"username": user["username"], "activo": user["activo"]})
+            return Result()
         if "UPDATE public.canales" in query:
             return Result({"codigo": "TELEGRAM", "activo": False})
         if "UPDATE public.agentes" in query:
@@ -90,6 +125,8 @@ class DashboardAppTests(unittest.TestCase):
     def login(self):
         with self.client.session_transaction() as user_session:
             user_session["authenticated"] = True
+            user_session["is_admin"] = True
+            user_session["username"] = "admin"
             user_session["csrf_token"] = "valid-csrf-token"
 
     def test_health_endpoint_is_available_without_database(self):
@@ -156,6 +193,7 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         with self.client.session_transaction() as user_session:
             self.assertTrue(user_session["authenticated"])
+            self.assertTrue(user_session["is_admin"])
 
     def test_channel_toggle_checks_csrf_and_updates_flag(self):
         self.login()
@@ -171,6 +209,174 @@ class DashboardAppTests(unittest.TestCase):
         self.login()
         response = self.client.post("/modulos/agentes/resolutor/toggle")
         self.assertEqual(response.status_code, 400)
+
+    def test_viewer_cannot_open_admin_modules(self):
+        self.connection.users["reader"] = {
+            "id": "47e01a6e-8441-4bf3-8e10-3d3f26c86955",
+            "username": "reader",
+            "nombre": "Reader",
+            "password_hash": generate_password_hash("reader-password"),
+            "activo": True,
+        }
+        with self.client.session_transaction() as user_session:
+            user_session["authenticated"] = True
+            user_session["is_admin"] = False
+            user_session["user_id"] = self.connection.users["reader"]["id"]
+            user_session["csrf_token"] = "valid-csrf-token"
+        response = self.client.get("/modulos")
+        self.assertEqual(response.status_code, 403)
+
+    def test_viewer_cannot_toggle_channel_even_with_csrf(self):
+        self.connection.users["reader"] = {
+            "id": "47e01a6e-8441-4bf3-8e10-3d3f26c86955",
+            "username": "reader",
+            "nombre": "Reader",
+            "password_hash": generate_password_hash("reader-password"),
+            "activo": True,
+        }
+        with self.client.session_transaction() as user_session:
+            user_session["authenticated"] = True
+            user_session["is_admin"] = False
+            user_session["user_id"] = self.connection.users["reader"]["id"]
+            user_session["csrf_token"] = "valid-csrf-token"
+        response = self.client.post(
+            "/modulos/canales/telegram/toggle",
+            data={"csrf_token": "valid-csrf-token"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(any("UPDATE public.canales" in query for query, _ in self.connection.executed))
+
+    def test_admin_can_create_viewer_with_one_time_generated_password(self):
+        self.login()
+        response = self.client.post(
+            "/usuarios",
+            data={
+                "username": "consulta1",
+                "nombre": "Usuario de consulta",
+                "csrf_token": "valid-csrf-token",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        match = re.search(rb'id="generated-password"[^>]*value="([^"]+)"', response.data)
+        self.assertIsNotNone(match)
+        password = match.group(1).decode()
+        saved = self.connection.users["consulta1"]
+        self.assertTrue(check_password_hash(saved["password_hash"], password))
+        self.assertNotEqual(saved["password_hash"], password)
+        self.assertIn("Contraseña copiada".encode(), response.data)
+
+    def test_regular_user_login_uses_hashed_database_password(self):
+        self.connection.users["consulta1"] = {
+            "id": "47e01a6e-8441-4bf3-8e10-3d3f26c86956",
+            "username": "consulta1",
+            "nombre": "Usuario de consulta",
+            "password_hash": generate_password_hash("generated-password"),
+            "activo": True,
+        }
+        with self.client.session_transaction() as user_session:
+            user_session["csrf_token"] = "valid-csrf-token"
+        response = self.client.post(
+            "/login",
+            data={
+                "username": "consulta1",
+                "password": "generated-password",
+                "csrf_token": "valid-csrf-token",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        with self.client.session_transaction() as user_session:
+            self.assertTrue(user_session["authenticated"])
+            self.assertFalse(user_session["is_admin"])
+            self.assertEqual(user_session["user_id"], self.connection.users["consulta1"]["id"])
+
+    def test_disabled_viewer_session_is_revoked(self):
+        self.connection.users["reader"] = {
+            "id": "47e01a6e-8441-4bf3-8e10-3d3f26c86955",
+            "username": "reader",
+            "nombre": "Reader",
+            "password_hash": generate_password_hash("reader-password"),
+            "activo": False,
+        }
+        with self.client.session_transaction() as user_session:
+            user_session["authenticated"] = True
+            user_session["is_admin"] = False
+            user_session["user_id"] = self.connection.users["reader"]["id"]
+        response = self.client.get("/casos")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/login", response.headers["Location"])
+        with self.client.session_transaction() as user_session:
+            self.assertNotIn("authenticated", user_session)
+
+    def test_viewer_cannot_open_n8n_controls(self):
+        self.connection.users["reader"] = {
+            "id": "47e01a6e-8441-4bf3-8e10-3d3f26c86955",
+            "username": "reader",
+            "nombre": "Reader",
+            "password_hash": generate_password_hash("reader-password"),
+            "activo": True,
+        }
+        with self.client.session_transaction() as user_session:
+            user_session["authenticated"] = True
+            user_session["is_admin"] = False
+            user_session["user_id"] = self.connection.users["reader"]["id"]
+            user_session["csrf_token"] = "valid-csrf-token"
+        response = self.client.get("/n8n")
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_activate_configured_workflow(self):
+        self.login()
+        self.app.config.update(
+            N8N_API_BASE_URL="https://n8n.example",
+            N8N_WORKFLOW_ID="workflow-id",
+            N8N_API_KEY="test-api-key",
+        )
+        post_response = MagicMock()
+        post_response.read.return_value = b""
+        post_response.__enter__.return_value = post_response
+        get_response = MagicMock()
+        get_response.read.return_value = (
+            b'{"active": false, "activeVersionId": "published-version"}'
+        )
+        get_response.__enter__.return_value = get_response
+        with patch("app.urlopen", side_effect=[post_response, get_response]) as api_call:
+            response = self.client.post(
+                "/n8n/toggle",
+                data={"action": "activate", "csrf_token": "valid-csrf-token"},
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(api_call.call_count, 2)
+        api_request = api_call.call_args_list[0].args[0]
+        self.assertEqual(api_request.full_url, "https://n8n.example/api/v1/workflows/workflow-id/publish")
+        self.assertEqual(api_request.method, "POST")
+        self.assertEqual(api_request.get_header("X-n8n-api-key"), "test-api-key")
+        self.assertEqual(
+            api_call.call_args_list[1].args[0].full_url,
+            "https://n8n.example/api/v1/workflows/workflow-id",
+        )
+
+    def test_admin_can_deactivate_configured_workflow(self):
+        self.login()
+        self.app.config.update(
+            N8N_API_BASE_URL="https://n8n.example",
+            N8N_WORKFLOW_ID="workflow-id",
+            N8N_API_KEY="test-api-key",
+        )
+        post_response = MagicMock()
+        post_response.read.return_value = b""
+        post_response.__enter__.return_value = post_response
+        get_response = MagicMock()
+        get_response.read.return_value = b'{"activeVersionId": null}'
+        get_response.__enter__.return_value = get_response
+        with patch("app.urlopen", side_effect=[post_response, get_response]) as api_call:
+            response = self.client.post(
+                "/n8n/toggle",
+                data={"action": "deactivate", "csrf_token": "valid-csrf-token"},
+            )
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            api_call.call_args_list[0].args[0].full_url,
+            "https://n8n.example/api/v1/workflows/workflow-id/unpublish",
+        )
 
 
 if __name__ == "__main__":

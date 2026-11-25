@@ -1,15 +1,25 @@
 import hmac
 import logging
 import os
+import re
 import secrets
 from functools import wraps
+from json import JSONDecodeError
+from urllib.error import HTTPError, URLError
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 import psycopg
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
 from psycopg.rows import dict_row
+from werkzeug.security import check_password_hash, generate_password_hash
 
 
 class DatabaseConfigurationError(Exception):
+    pass
+
+
+class N8NApiError(Exception):
     pass
 
 
@@ -21,6 +31,9 @@ def create_app(test_config=None):
         DASHBOARD_USERNAME=os.environ.get("DASHBOARD_USERNAME", ""),
         DASHBOARD_PASSWORD=os.environ.get("DASHBOARD_PASSWORD", ""),
         N8N_CONTROL_TOKEN=os.environ.get("N8N_CONTROL_TOKEN", ""),
+        N8N_API_BASE_URL=os.environ.get("N8N_API_BASE_URL", ""),
+        N8N_WORKFLOW_ID=os.environ.get("N8N_WORKFLOW_ID", ""),
+        N8N_API_KEY=os.environ.get("N8N_API_KEY", ""),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
@@ -50,6 +63,33 @@ def create_app(test_config=None):
                 if request.path.startswith("/api/") or request.path.startswith("/internal/"):
                     return jsonify(error="Autenticación requerida."), 401
                 return redirect(url_for("login", next=request.full_path))
+            if not session.get("is_admin"):
+                user_id = session.get("user_id")
+                if not user_id:
+                    session.clear()
+                    if request.path.startswith("/api/") or request.path.startswith("/internal/"):
+                        return jsonify(error="Autenticación requerida."), 401
+                    return redirect(url_for("login", next=request.full_path))
+                with app.extensions["db_connection"]() as connection:
+                    account = connection.execute(
+                        "SELECT activo FROM public.usuarios_panel WHERE id = %s",
+                        (user_id,),
+                    ).fetchone()
+                if account is None or not account["activo"]:
+                    session.clear()
+                    if request.path.startswith("/api/") or request.path.startswith("/internal/"):
+                        return jsonify(error="La cuenta está deshabilitada."), 401
+                    return redirect(url_for("login"))
+            return view(*args, **kwargs)
+
+        return wrapped
+
+    def admin_required(view):
+        @wraps(view)
+        @authenticated
+        def wrapped(*args, **kwargs):
+            if not session.get("is_admin"):
+                abort(403)
             return view(*args, **kwargs)
 
         return wrapped
@@ -57,6 +97,43 @@ def create_app(test_config=None):
     def valid_csrf():
         token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token", "")
         return bool(token and hmac.compare_digest(token, session.get("csrf_token", "")))
+
+    def n8n_api_request(method, action=""):
+        base_url = app.config["N8N_API_BASE_URL"].rstrip("/")
+        workflow_id = app.config["N8N_WORKFLOW_ID"].strip()
+        api_key = app.config["N8N_API_KEY"]
+        if not base_url or not workflow_id or not api_key:
+            raise N8NApiError(
+                "Configura N8N_API_BASE_URL, N8N_WORKFLOW_ID y N8N_API_KEY."
+            )
+        action_paths = {"activate": "publish", "deactivate": "unpublish"}
+        suffix = f"/{action_paths[action]}" if action else ""
+        url = f"{base_url}/api/v1/workflows/{quote(workflow_id, safe='')}{suffix}"
+        data = b"{}" if method == "POST" else None
+        api_request = Request(
+            url,
+            data=data,
+            headers={"X-N8N-API-KEY": api_key, "Content-Type": "application/json"},
+            method=method,
+        )
+        try:
+            with urlopen(api_request, timeout=10) as response:
+                body = response.read()
+        except HTTPError as error:
+            app.logger.warning("n8n API rechazó la solicitud (HTTP %s).", error.code)
+            raise N8NApiError(
+                f"n8n rechazó la solicitud (HTTP {error.code})."
+            ) from error
+        except URLError as error:
+            app.logger.error("No se pudo conectar con n8n: %s", error.reason)
+            raise N8NApiError("No se pudo conectar con n8n.") from error
+        if not body:
+            return {}
+        try:
+            return app.json.loads(body)
+        except (JSONDecodeError, UnicodeDecodeError) as error:
+            app.logger.error("n8n devolvió una respuesta JSON inválida.")
+            raise N8NApiError("n8n devolvió una respuesta no válida.") from error
 
     @app.before_request
     def ensure_csrf_token():
@@ -91,6 +168,20 @@ def create_app(test_config=None):
             503,
         )
 
+    @app.errorhandler(N8NApiError)
+    def handle_n8n_api_error(error):
+        app.logger.error("Error de integración con n8n: %s", error)
+        if request.path.startswith("/api/"):
+            return jsonify(error=str(error)), 502
+        return (
+            render_template(
+                "error.html",
+                title="No se pudo consultar n8n",
+                message=str(error),
+            ),
+            502,
+        )
+
     @app.get("/healthz")
     def health():
         return jsonify(status="ok")
@@ -106,15 +197,50 @@ def create_app(test_config=None):
         if request.method == "POST":
             if not valid_csrf():
                 abort(400, description="Token CSRF inválido.")
-            username = app.config["DASHBOARD_USERNAME"]
-            password = app.config["DASHBOARD_PASSWORD"]
-            if not username or not password:
-                abort(503, description="Configura DASHBOARD_USERNAME y DASHBOARD_PASSWORD.")
-            user_matches = hmac.compare_digest(request.form.get("username", ""), username)
-            password_matches = hmac.compare_digest(request.form.get("password", ""), password)
-            if user_matches and password_matches:
+            username = request.form.get("username", "").strip().lower()
+            password = request.form.get("password", "")
+            admin_username = app.config["DASHBOARD_USERNAME"].strip().lower()
+            admin_password = app.config["DASHBOARD_PASSWORD"]
+            is_admin = bool(
+                admin_username
+                and admin_password
+                and hmac.compare_digest(username, admin_username)
+                and hmac.compare_digest(password, admin_password)
+            )
+            account = None
+            if not is_admin and username != admin_username:
+                with app.extensions["db_connection"]() as connection:
+                    account = connection.execute(
+                        """
+                        SELECT id, username, nombre, password_hash, activo
+                        FROM public.usuarios_panel
+                        WHERE username = %s
+                        """,
+                        (username,),
+                    ).fetchone()
+                if (
+                    account
+                    and account["activo"]
+                    and check_password_hash(account["password_hash"], password)
+                ):
+                    with app.extensions["db_connection"]() as connection:
+                        connection.execute(
+                            """
+                            UPDATE public.usuarios_panel
+                            SET ultimo_acceso_en = now()
+                            WHERE id = %s
+                            """,
+                            (account["id"],),
+                        )
+                else:
+                    account = None
+            if is_admin or account:
                 session.clear()
                 session["authenticated"] = True
+                session["is_admin"] = is_admin
+                session["username"] = admin_username if is_admin else account["username"]
+                if not is_admin:
+                    session["user_id"] = str(account["id"])
                 session["csrf_token"] = secrets.token_urlsafe(32)
                 destination = request.args.get("next", "")
                 if not destination.startswith("/") or destination.startswith("//"):
@@ -265,7 +391,7 @@ def create_app(test_config=None):
         )
 
     @app.get("/modulos")
-    @authenticated
+    @admin_required
     def modules():
         with app.extensions["db_connection"]() as connection:
             channels = connection.execute(
@@ -282,7 +408,7 @@ def create_app(test_config=None):
         )
 
     @app.post("/modulos/canales/<codigo>/toggle")
-    @authenticated
+    @admin_required
     def toggle_channel(codigo):
         if not valid_csrf():
             abort(400, description="Token CSRF inválido.")
@@ -305,7 +431,7 @@ def create_app(test_config=None):
         return redirect(url_for("modules"))
 
     @app.post("/modulos/agentes/<codigo>/toggle")
-    @authenticated
+    @admin_required
     def toggle_agent(codigo):
         if not valid_csrf():
             abort(400, description="Token CSRF inválido.")
@@ -326,6 +452,128 @@ def create_app(test_config=None):
             "success",
         )
         return redirect(url_for("modules"))
+
+    @app.route("/usuarios", methods=["GET", "POST"])
+    @admin_required
+    def manage_users():
+        generated_password = None
+        if request.method == "POST":
+            if not valid_csrf():
+                abort(400, description="Token CSRF inválido.")
+            username = request.form.get("username", "").strip().lower()
+            full_name = request.form.get("nombre", "").strip()
+            reserved_username = app.config["DASHBOARD_USERNAME"].strip().lower()
+            if not re.fullmatch(r"[a-z0-9._-]{3,64}", username):
+                flash("El usuario debe tener 3–64 caracteres: letras, números, punto, guion o guion bajo.", "error")
+            elif username == reserved_username:
+                flash("Ese nombre está reservado para la cuenta administradora.", "error")
+            elif not full_name or len(full_name) > 120:
+                flash("Ingresa un nombre de hasta 120 caracteres.", "error")
+            else:
+                generated_password = secrets.token_urlsafe(18)
+                password_hash = generate_password_hash(generated_password)
+                with app.extensions["db_connection"]() as connection:
+                    created = connection.execute(
+                        """
+                        INSERT INTO public.usuarios_panel
+                            (username, nombre, password_hash, creado_por)
+                        VALUES (%s, %s, %s, %s)
+                        ON CONFLICT (username) DO NOTHING
+                        RETURNING id
+                        """,
+                        (username, full_name, password_hash, session["username"]),
+                    ).fetchone()
+                if created is None:
+                    generated_password = None
+                    flash("Ya existe una cuenta con ese nombre de usuario.", "error")
+                else:
+                    flash("Cuenta creada. Copia la contraseña temporal antes de salir de esta página.", "success")
+
+        with app.extensions["db_connection"]() as connection:
+            users = connection.execute(
+                """
+                SELECT id, username, nombre, activo, creado_en, ultimo_acceso_en
+                FROM public.usuarios_panel
+                ORDER BY creado_en DESC
+                """
+            ).fetchall()
+        return render_template(
+            "users.html",
+            users=users,
+            generated_password=generated_password,
+            csrf_token=session["csrf_token"],
+        )
+
+    @app.post("/usuarios/<uuid:user_id>/toggle")
+    @admin_required
+    def toggle_user(user_id):
+        if not valid_csrf():
+            abort(400, description="Token CSRF inválido.")
+        with app.extensions["db_connection"]() as connection:
+            row = connection.execute(
+                """
+                UPDATE public.usuarios_panel
+                SET activo = NOT activo
+                WHERE id = %s
+                RETURNING username, activo
+                """,
+                (str(user_id),),
+            ).fetchone()
+            if row is None:
+                abort(404)
+        flash(
+            f"Cuenta {row['username']}: {'habilitada' if row['activo'] else 'deshabilitada'}.",
+            "success",
+        )
+        return redirect(url_for("manage_users"))
+
+    @app.get("/n8n")
+    @admin_required
+    def n8n_workflow():
+        configured = all(
+            app.config[key]
+            for key in ("N8N_API_BASE_URL", "N8N_WORKFLOW_ID", "N8N_API_KEY")
+        )
+        workflow = n8n_api_request("GET") if configured else None
+        if workflow is not None:
+            if "activeVersionId" in workflow:
+                workflow["is_active"] = workflow["activeVersionId"] is not None
+            elif isinstance(workflow.get("active"), bool):
+                workflow["is_active"] = workflow["active"]
+            else:
+                raise N8NApiError("n8n no devolvió el estado del workflow.")
+        return render_template(
+            "n8n.html",
+            configured=configured,
+            workflow=workflow,
+            workflow_id=app.config["N8N_WORKFLOW_ID"],
+            csrf_token=session["csrf_token"],
+        )
+
+    @app.post("/n8n/toggle")
+    @admin_required
+    def toggle_n8n_workflow():
+        if not valid_csrf():
+            abort(400, description="Token CSRF inválido.")
+        action = request.form.get("action", "")
+        if action not in {"activate", "deactivate"}:
+            abort(400, description="Acción no válida.")
+        n8n_api_request("POST", action)
+        workflow = n8n_api_request("GET")
+        active = (
+            workflow["activeVersionId"] is not None
+            if "activeVersionId" in workflow
+            else workflow.get("active")
+        )
+        if active is not (action == "activate"):
+            raise N8NApiError("n8n no confirmó el cambio de estado.")
+        flash(
+            "Workflow activado en n8n."
+            if action == "activate"
+            else "Workflow desactivado en n8n.",
+            "success",
+        )
+        return redirect(url_for("n8n_workflow"))
 
     @app.get("/api/dashboard")
     @authenticated

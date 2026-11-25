@@ -13,7 +13,7 @@
 </section>
 <section class="content-grid">
   <article class="panel">
-    <div class="panel-heading"><div><h2>Atención por agente</h2><p class="muted">Casos con al menos una ejecución exitosa</p></div><a href="{{ url_for('modules') }}">Administrar agentes →</a></div>
+    <div class="panel-heading"><div><h2>Atención por agente</h2><p class="muted">Casos con al menos una ejecución exitosa</p></div>{% if session.get('is_admin') %}<a href="{{ url_for('modules') }}">Administrar agentes →</a>{% endif %}</div>
     {% if agent_stats %}
     <div class="agent-list">
       {% for agent in agent_stats %}
@@ -27,7 +27,7 @@
     {% else %}<p class="empty-state">Todavía no hay agentes configurados.</p>{% endif %}
   </article>
   <article class="panel">
-    <div class="panel-heading"><div><h2>Canales</h2><p class="muted">Estado y casos recibidos</p></div><a href="{{ url_for('modules') }}">Ver módulos →</a></div>
+    <div class="panel-heading"><div><h2>Canales</h2><p class="muted">Estado y casos recibidos</p></div>{% if session.get('is_admin') %}<a href="{{ url_for('modules') }}">Ver módulos →</a>{% endif %}</div>
     {% if channel_stats %}
     <div class="channel-list">
       {% for channel in channel_stats %}

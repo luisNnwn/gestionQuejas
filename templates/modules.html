@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Módulos | UFG{% endblock %}
 {% block content %}
-<header class="page-header"><div><p class="eyebrow">CONFIGURACIÓN</p><h1>Módulos</h1><p class="muted">Administra canales de entrada y disponibilidad de agentes.</p></div></header>
-<div class="notice"><strong>Importante:</strong> estos controles actualizan las banderas <code>activo</code> en PostgreSQL. Para que n8n las aplique en tiempo real, su workflow debe consultar <code>/internal/config</code> antes de procesar el canal o escalar a un agente.</div>
+<header class="page-header"><div><p class="eyebrow">CONFIGURACIÓN</p><h1>Módulos</h1><p class="muted">Solo el administrador puede habilitar canales y niveles de atención.</p></div></header>
+<div class="notice">Los cambios se guardan en Supabase y el workflow consulta esos mismos estados antes de procesar mensajes y escalar casos.</div>
 <section class="panel modules-panel"><div class="panel-heading"><div><h2>Canales de atención</h2><p class="muted">Desactivar un canal bloquea su procesamiento cuando n8n respeta la configuración.</p></div></div>
   {% for channel in channels %}<div class="module-row"><span class="module-icon">{{ {'TELEGRAM':'➤','GMAIL':'✉','DISCORD':'◉','WEB':'◎'}.get(channel.codigo, '•') }}</span><div class="module-description"><strong>{{ channel.nombre }}</strong><small>{{ channel.codigo }}</small></div><span class="pill {{ 'pill-on' if channel.activo else 'pill-off' }}">{{ 'Habilitado' if channel.activo else 'Deshabilitado' }}</span><form method="post" action="{{ url_for('toggle_channel', codigo=channel.codigo) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button {{ 'danger' if channel.activo else 'primary' }}" type="submit">{{ 'Deshabilitar' if channel.activo else 'Habilitar' }}</button></form></div>{% else %}<p class="empty-state">No se encontraron canales.</p>{% endfor %}
 </section>

@@ -10,6 +10,22 @@ CREATE TABLE IF NOT EXISTS public.usuarios (
     UNIQUE (canal_preferido, identificador_externo)
 );
 
+CREATE TABLE IF NOT EXISTS public.usuarios_panel (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    username text NOT NULL UNIQUE
+        CHECK (
+            username = lower(username)
+            AND length(username) BETWEEN 3 AND 64
+            AND username ~ '^[a-z0-9._-]+$'
+        ),
+    nombre text NOT NULL,
+    password_hash text NOT NULL,
+    activo boolean NOT NULL DEFAULT true,
+    creado_por text NOT NULL,
+    creado_en timestamptz NOT NULL DEFAULT now(),
+    ultimo_acceso_en timestamptz
+);
+
 CREATE TABLE IF NOT EXISTS public.canales (
     id bigserial PRIMARY KEY,
     codigo text NOT NULL UNIQUE,
@@ -21,10 +37,15 @@ CREATE TABLE IF NOT EXISTS public.agentes (
     id bigserial PRIMARY KEY,
     codigo text NOT NULL UNIQUE,
     nombre text NOT NULL,
-    nivel integer NOT NULL CHECK (nivel BETWEEN 1 AND 3),
+    nivel integer NOT NULL CHECK (nivel BETWEEN 1 AND 4),
     descripcion text,
     activo boolean NOT NULL DEFAULT true
 );
+
+ALTER TABLE public.agentes
+    DROP CONSTRAINT IF EXISTS agentes_nivel_check;
+ALTER TABLE public.agentes
+    ADD CONSTRAINT agentes_nivel_check CHECK (nivel BETWEEN 1 AND 4);
 
 CREATE TABLE IF NOT EXISTS public.casos (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -42,9 +63,26 @@ CREATE TABLE IF NOT EXISTS public.casos (
     respuesta text,
     mensaje_externo_id text,
     recibido_en timestamptz NOT NULL DEFAULT now(),
-    actualizado_en timestamptz NOT NULL DEFAULT now(),
-    UNIQUE (canal, mensaje_externo_id)
+    actualizado_en timestamptz NOT NULL DEFAULT now()
 );
+
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM public.casos
+        WHERE mensaje_externo_id IS NOT NULL
+        GROUP BY canal, mensaje_externo_id
+        HAVING count(*) > 1
+    ) THEN
+        RAISE EXCEPTION
+            'No se puede crear idx_casos_canal_mensaje_externo: hay casos duplicados por canal y mensaje_externo_id.';
+    END IF;
+END;
+$$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_casos_canal_mensaje_externo
+    ON public.casos (canal, mensaje_externo_id);
 
 CREATE TABLE IF NOT EXISTS public.mensajes (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -89,7 +127,8 @@ VALUES
     ('CLASIFICADOR', 'Clasificador', 1, 'Clasifica solicitudes'),
     ('RESOLUTOR', 'Resolutor', 1, 'Resuelve consultas frecuentes'),
     ('ESPECIALISTA', 'Especialista', 2, 'Atiende incidencias escaladas'),
-    ('SUPERVISOR', 'Supervisor', 3, 'Supervisa casos y calidad')
+    ('SUPERVISOR', 'Supervisor', 3, 'Supervisa casos y calidad'),
+    ('ESPECIALIZADO', 'Unidad especializada', 4, 'Atiende casos de nivel especializado')
 ON CONFLICT (codigo) DO NOTHING;
 
 CREATE INDEX IF NOT EXISTS idx_casos_recibido_en

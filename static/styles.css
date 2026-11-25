@@ -15,6 +15,7 @@ nav a{display:flex;align-items:center;gap:12px;padding:12px;color:#657187;border
 nav a span{width:19px;text-align:center;font-size:16px}
 nav a.active,nav a:hover{background:#f0f2ff;color:#514fe0;text-decoration:none}
 .sidebar-bottom{margin-top:auto;padding:14px 10px 0;border-top:1px solid var(--line);color:#748198;font-size:12px}
+.sidebar-user{margin-top:8px;color:#929daf;font-size:10px}
 .status-dot{display:inline-block;width:7px;height:7px;margin-right:7px;border-radius:50%;background:#27be84}
 .logout-form{margin-top:16px}
 .logout-link{border:0;background:none;padding:0;color:#617087;cursor:pointer;font:inherit}
@@ -73,6 +74,15 @@ tbody tr:last-child td{border-bottom:0}
 .filters{display:flex;align-items:end;gap:12px;margin-bottom:20px}
 .filters label,.stack-form label{display:grid;gap:6px;color:#58667d;font-size:11px;font-weight:600}
 .filters select,.stack-form input{min-width:180px;border:1px solid #e2e7ef;border-radius:7px;background:#fff;padding:10px;color:#3b4860;font:12px Arial,sans-serif}
+.user-create-form{display:grid;grid-template-columns:1fr 1fr auto;align-items:end;gap:14px}
+.user-create-form label{display:grid;gap:6px;color:#58667d;font-size:11px;font-weight:600}
+.user-create-form input{width:100%;border:1px solid #e2e7ef;border-radius:7px;background:#fff;padding:10px;color:#3b4860;font:12px Arial,sans-serif}
+.credential-reveal{margin-bottom:18px;border-color:#cfe9dc;background:#f8fffb}
+.credential-reveal h2{margin:0 0 7px;color:#22845e;font-size:15px}
+.copy-field{display:flex;gap:8px;margin-top:12px}
+.copy-field input{flex:1;min-width:0;border:1px solid #dce5e0;border-radius:7px;padding:10px;font:13px monospace}
+.copy-status{display:block;margin-top:8px}
+.n8n-panel{max-width:760px}
 .modules-panel{padding:10px 22px}
 .modules-panel>.panel-heading{padding-top:14px}
 .module-row{display:flex;align-items:center;gap:13px;padding:15px 0;border-top:1px solid #f0f2f6}
@@ -108,4 +118,4 @@ tbody tr:last-child td{border-bottom:0}
 .error-card .stat-icon{margin:0 auto 14px}
 .error-card .button{margin-top:20px}
 @media(max-width:1100px){.main-content{padding:32px 26px}.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.content-grid,.detail-grid{grid-template-columns:1fr}}
-@media(max-width:700px){.sidebar{position:static;width:auto;height:auto;padding:14px 16px;border-right:0;border-bottom:1px solid var(--line)}.brand{font-size:15px}.sidebar .nav-label,.sidebar-bottom{display:none}nav{display:flex;gap:3px;margin-top:14px}nav a{flex:1;justify-content:center;padding:9px 6px;font-size:11px}nav a span{display:none}.main-content{margin:0;padding:24px 15px 40px}.page-header{align-items:flex-start}.page-header h1{font-size:24px}.page-header>.button{font-size:10px;padding:9px}.stats-grid{gap:10px}.stat-card{min-height:130px;padding:14px}.stat-card strong{font-size:23px}.panel{padding:16px}.filters{align-items:stretch;flex-direction:column}.filters select{width:100%}.filters .button{width:100%}.module-row{gap:8px;flex-wrap:wrap}.module-description{min-width:150px}.module-row form{margin-left:auto}.detail-list{grid-template-columns:130px 1fr}.flash-list{left:12px;right:12px}.flash{text-align:center}}
+@media(max-width:700px){.sidebar{position:static;width:auto;height:auto;padding:14px 16px;border-right:0;border-bottom:1px solid var(--line)}.brand{font-size:15px}.sidebar .nav-label,.sidebar-bottom{display:none}nav{display:flex;gap:3px;margin-top:14px}nav a{flex:1;justify-content:center;padding:9px 6px;font-size:11px}nav a span{display:none}.main-content{margin:0;padding:24px 15px 40px}.page-header{align-items:flex-start}.page-header h1{font-size:24px}.page-header>.button{font-size:10px;padding:9px}.stats-grid{gap:10px}.stat-card{min-height:130px;padding:14px}.stat-card strong{font-size:23px}.panel{padding:16px}.filters{align-items:stretch;flex-direction:column}.filters select{width:100%}.filters .button{width:100%}.user-create-form{grid-template-columns:1fr}.module-row{gap:8px;flex-wrap:wrap}.module-description{min-width:150px}.module-row form{margin-left:auto}.detail-list{grid-template-columns:130px 1fr}.flash-list{left:12px;right:12px}.flash{text-align:center}}

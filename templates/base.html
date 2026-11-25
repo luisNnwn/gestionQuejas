@@ -14,10 +14,15 @@
     <nav>
       <a class="{{ 'active' if request.endpoint == 'dashboard' else '' }}" href="{{ url_for('dashboard') }}"><span>▦</span> Dashboard</a>
       <a class="{{ 'active' if request.endpoint in ('cases', 'case_detail') else '' }}" href="{{ url_for('cases') }}"><span>▤</span> Casos</a>
+      {% if session.get("is_admin") %}
       <a class="{{ 'active' if request.endpoint == 'modules' else '' }}" href="{{ url_for('modules') }}"><span>◉</span> Módulos</a>
+      <a class="{{ 'active' if request.endpoint in ('manage_users', 'toggle_user') else '' }}" href="{{ url_for('manage_users') }}"><span>♙</span> Usuarios</a>
+      <a class="{{ 'active' if request.endpoint in ('n8n_workflow', 'toggle_n8n_workflow') else '' }}" href="{{ url_for('n8n_workflow') }}"><span>↻</span> n8n</a>
+      {% endif %}
     </nav>
     <div class="sidebar-bottom">
       <span class="status-dot"></span> Panel operativo
+      <div class="sidebar-user">{{ session.get("username") }} · {{ 'Admin' if session.get("is_admin") else 'Consulta' }}</div>
       <form action="{{ url_for('logout') }}" method="post" class="logout-form">
         <input type="hidden" name="csrf_token" value="{{ session.get('csrf_token', '') }}">
         <button type="submit" class="logout-link">Cerrar sesión</button>

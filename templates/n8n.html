@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Control n8n | UFG{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><p class="eyebrow">ADMINISTRACIÓN</p><h1>Workflow n8n</h1><p class="muted">Solo el administrador puede habilitar o detener el workflow.</p></div>
+</header>
+<section class="panel n8n-panel">
+  <div class="panel-heading"><div><h2>{{ workflow.name if workflow else 'Control de activación' }}</h2><p class="muted">ID: {{ workflow_id or 'No configurado' }}</p></div></div>
+  {% if not configured %}
+    <div class="notice">Falta configurar <code>N8N_API_BASE_URL</code>, <code>N8N_WORKFLOW_ID</code> y <code>N8N_API_KEY</code> en el servicio web. No se puede cambiar el estado desde aquí.</div>
+  {% else %}
+    <p>Estado actual: <span class="pill {{ 'pill-on' if workflow.is_active else 'pill-off' }}">{{ 'Activo' if workflow.is_active else 'Inactivo' }}</span></p>
+    <form method="post" action="{{ url_for('toggle_n8n_workflow') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <input type="hidden" name="action" value="{{ 'deactivate' if workflow.is_active else 'activate' }}">
+      <button class="button {{ 'danger' if workflow.is_active else 'primary' }}" type="submit">{{ 'Desactivar workflow' if workflow.is_active else 'Activar workflow' }}</button>
+    </form>
+  {% endif %}
+</section>
+{% endblock %}

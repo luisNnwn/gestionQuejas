@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Usuarios | UFG{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><p class="eyebrow">ADMINISTRACIÓN</p><h1>Usuarios</h1><p class="muted">Crea cuentas de consulta. La contraseña generada se muestra una sola vez.</p></div>
+</header>
+{% if generated_password %}
+<section class="panel credential-reveal" role="status">
+  <h2>Cuenta creada: {{ request.form.get('username', '').strip().lower() }}</h2>
+  <p class="muted">Entrega esta contraseña al usuario por un canal seguro y guárdala antes de salir de esta página.</p>
+  <div class="copy-field"><input id="generated-password" type="text" readonly value="{{ generated_password }}" aria-label="Contraseña temporal generada"><button class="button secondary" type="button" id="copy-password">Copiar</button></div>
+  <small id="copy-status" class="muted"></small>
+</section>
+{% endif %}
+<section class="panel user-create-panel">
+  <div class="panel-heading"><div><h2>Crear cuenta de consulta</h2><p class="muted">Las cuentas creadas pueden ver casos, pero no administrar módulos ni workflows.</p></div></div>
+  <form method="post" class="user-create-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Usuario<input name="username" minlength="3" maxlength="64" pattern="[A-Za-z0-9._-]+" autocomplete="off" required></label>
+    <label>Nombre<input name="nombre" maxlength="120" autocomplete="name" required></label>
+    <button class="button primary" type="submit">Crear y generar contraseña</button>
+  </form>
+</section>
+<section class="panel user-list-panel">
+  <div class="panel-heading"><div><h2>Cuentas existentes</h2><p class="muted">Deshabilitar una cuenta revoca su acceso en la siguiente solicitud.</p></div></div>
+  {% if users %}
+  <div class="table-wrap"><table><thead><tr><th>Usuario</th><th>Nombre</th><th>Estado</th><th>Creada</th><th>Último acceso</th><th></th></tr></thead><tbody>
+    {% for user in users %}
+    <tr>
+      <td>{{ user.username }}</td><td>{{ user.nombre }}</td>
+      <td><span class="pill {{ 'pill-on' if user.activo else 'pill-off' }}">{{ 'Habilitada' if user.activo else 'Deshabilitada' }}</span></td>
+      <td>{{ user.creado_en.strftime('%d/%m/%Y %H:%M') if user.creado_en else '—' }}</td>
+      <td>{{ user.ultimo_acceso_en.strftime('%d/%m/%Y %H:%M') if user.ultimo_acceso_en else 'Nunca' }}</td>
+      <td><form method="post" action="{{ url_for('toggle_user', user_id=user.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button class="button {{ 'danger' if user.activo else 'primary' }}" type="submit">{{ 'Deshabilitar' if user.activo else 'Habilitar' }}</button></form></td>
+    </tr>
+    {% endfor %}
+  </tbody></table></div>
+  {% else %}<p class="empty-state">Todavía no hay cuentas de consulta.</p>{% endif %}
+</section>
+{% if generated_password %}
+<script>
+  document.getElementById('copy-password').addEventListener('click', function () {
+    navigator.clipboard.writeText(document.getElementById('generated-password').value)
+      .then(function () { document.getElementById('copy-status').textContent = 'Contraseña copiada.'; })
+      .catch(function () { document.getElementById('copy-status').textContent = 'No se pudo copiar automáticamente; selecciónala y cópiala manualmente.'; });
+  });
+</script>
+{% endif %}
+{% endblock %}

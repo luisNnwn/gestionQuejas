@@ -3,9 +3,9 @@
 {% block content %}
 <section class="login-card">
   <a class="brand login-brand" href="{{ url_for('login') }}"><span class="brand-mark">U</span><span>UFG <small>Atención estudiantil</small></span></a>
-  <p class="eyebrow">PANEL DE ADMINISTRACIÓN</p>
+  <p class="eyebrow">PANEL DE ATENCIÓN</p>
   <h1>Bienvenido</h1>
-  <p class="muted">Ingresa para revisar y gestionar las consultas.</p>
+  <p class="muted">Ingresa con la cuenta que te proporcionó el administrador.</p>
   <form method="post" class="stack-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <label>Usuario<input name="username" autocomplete="username" required autofocus></label>
