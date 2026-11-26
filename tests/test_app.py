@@ -71,12 +71,20 @@ class FakeConnection:
         if "SELECT codigo, nivel, activo FROM public.agentes" in query:
             return Result(rows=[{"codigo": "RESOLUTOR", "nivel": 1, "activo": True}])
         if "SELECT id, codigo, nombre, activo FROM public.canales" in query:
-            return Result(rows=[{
-                "id": 1,
-                "codigo": "TELEGRAM",
-                "nombre": "Telegram",
-                "activo": True,
-            }])
+            return Result(rows=[
+                {
+                    "id": 1,
+                    "codigo": "TELEGRAM",
+                    "nombre": "Telegram",
+                    "activo": True,
+                },
+                {
+                    "id": 4,
+                    "codigo": "WEB",
+                    "nombre": "Sitio web",
+                    "activo": True,
+                },
+            ])
         if "SELECT id, codigo, nombre, nivel, descripcion, activo FROM public.agentes" in query:
             return Result(rows=[{
                 "id": 1,
@@ -97,12 +105,20 @@ class FakeConnection:
                 "atendidas": 2,
             }])
         if "FROM public.canales AS c" in query:
-            return Result(rows=[{
-                "codigo": "TELEGRAM",
-                "nombre": "Telegram",
-                "activo": True,
-                "casos": 4,
-            }])
+            return Result(rows=[
+                {
+                    "codigo": "TELEGRAM",
+                    "nombre": "Telegram",
+                    "activo": True,
+                    "casos": 4,
+                },
+                {
+                    "codigo": "WEB",
+                    "nombre": "Sitio web",
+                    "activo": True,
+                    "casos": 1,
+                },
+            ])
         return Result()
 
 
@@ -171,6 +187,7 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Casos registrados", response.data)
         self.assertIn(b"Resolutor", response.data)
+        self.assertNotIn(b"Sitio web", response.data)
         self.assertIn("PENDIENTE_HUMANO", self.connection.executed[0][0])
 
     def test_modules_page_renders_database_controls(self):
@@ -178,6 +195,19 @@ class DashboardAppTests(unittest.TestCase):
         response = self.client.get("/modulos")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Deshabilitar", response.data)
+        self.assertNotIn(b"Sitio web", response.data)
+
+    def test_web_channel_cannot_be_toggled(self):
+        self.login()
+        response = self.client.post(
+            "/modulos/canales/web/toggle",
+            data={"csrf_token": "valid-csrf-token"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(any(
+            "UPDATE public.canales" in query
+            for query, _ in self.connection.executed
+        ))
 
     def test_login_accepts_valid_credentials(self):
         with self.client.session_transaction() as user_session:

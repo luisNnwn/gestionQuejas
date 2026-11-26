@@ -118,9 +118,10 @@ INSERT INTO public.canales (codigo, nombre)
 VALUES
     ('TELEGRAM', 'Telegram'),
     ('GMAIL', 'Gmail'),
-    ('DISCORD', 'Discord'),
-    ('WEB', 'Sitio web')
+    ('DISCORD', 'Discord')
 ON CONFLICT (codigo) DO NOTHING;
+
+DELETE FROM public.canales WHERE codigo = 'WEB';
 
 INSERT INTO public.agentes (codigo, nombre, nivel, descripcion)
 VALUES

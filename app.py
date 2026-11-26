@@ -23,6 +23,9 @@ class N8NApiError(Exception):
     pass
 
 
+CONFIGURABLE_CHANNELS = frozenset({"TELEGRAM", "GMAIL", "DISCORD"})
+
+
 def create_app(test_config=None):
     app = Flask(__name__)
     app.config.from_mapping(
@@ -297,6 +300,10 @@ def create_app(test_config=None):
                 ORDER BY c.nombre
                 """
             ).fetchall()
+            channel_stats = [
+                channel for channel in channel_stats
+                if channel["codigo"] in CONFIGURABLE_CHANNELS
+            ]
             latest_cases = connection.execute(
                 """
                 SELECT id, canal, remitente_nombre, asunto, categoria, prioridad, agente_asignado,
@@ -397,6 +404,10 @@ def create_app(test_config=None):
             channels = connection.execute(
                 "SELECT id, codigo, nombre, activo FROM public.canales ORDER BY nombre"
             ).fetchall()
+            channels = [
+                channel for channel in channels
+                if channel["codigo"] in CONFIGURABLE_CHANNELS
+            ]
             agents = connection.execute(
                 "SELECT id, codigo, nombre, nivel, descripcion, activo FROM public.agentes ORDER BY nivel, nombre"
             ).fetchall()
@@ -412,6 +423,9 @@ def create_app(test_config=None):
     def toggle_channel(codigo):
         if not valid_csrf():
             abort(400, description="Token CSRF inválido.")
+        channel_code = codigo.upper()
+        if channel_code not in CONFIGURABLE_CHANNELS:
+            abort(404)
         with app.extensions["db_connection"]() as connection:
             row = connection.execute(
                 """
@@ -420,7 +434,7 @@ def create_app(test_config=None):
                 WHERE codigo = %s
                 RETURNING codigo, activo
                 """,
-                (codigo.upper(),),
+                (channel_code,),
             ).fetchone()
             if row is None:
                 abort(404)

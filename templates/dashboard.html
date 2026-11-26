@@ -31,7 +31,7 @@
     {% if channel_stats %}
     <div class="channel-list">
       {% for channel in channel_stats %}
-      <div class="channel-row"><span class="channel-icon">{{ {'TELEGRAM':'➤','GMAIL':'✉','DISCORD':'◉','WEB':'◎'}.get(channel.codigo, '•') }}</span><div class="channel-info"><strong>{{ channel.nombre }}</strong><small>{{ channel.casos }} casos</small></div><span class="pill {{ 'pill-on' if channel.activo else 'pill-off' }}">{{ 'Activo' if channel.activo else 'Inactivo' }}</span></div>
+      <div class="channel-row"><span class="channel-icon">{{ {'TELEGRAM':'➤','GMAIL':'✉','DISCORD':'◉'}.get(channel.codigo, '•') }}</span><div class="channel-info"><strong>{{ channel.nombre }}</strong><small>{{ channel.casos }} casos</small></div><span class="pill {{ 'pill-on' if channel.activo else 'pill-off' }}">{{ 'Activo' if channel.activo else 'Inactivo' }}</span></div>
       {% endfor %}
     </div>
     {% else %}<p class="empty-state">Todavía no hay canales configurados.</p>{% endif %}
