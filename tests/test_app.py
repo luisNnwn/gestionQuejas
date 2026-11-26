@@ -22,6 +22,7 @@ class FakeConnection:
     def __init__(self, *args, **kwargs):
         self.executed = []
         self.users = {}
+        self.gemini_status = None
 
     def __enter__(self):
         return self
@@ -31,6 +32,11 @@ class FakeConnection:
 
     def execute(self, query, params=None):
         self.executed.append((query, params))
+        if "SELECT status, updated_at FROM public.gemini_api_status" in query:
+            return Result(self.gemini_status)
+        if "INSERT INTO public.gemini_api_status" in query:
+            self.gemini_status = {"status": params[0], "updated_at": None}
+            return Result()
         if "SELECT activo FROM public.usuarios_panel" in query:
             return Result(next(
                 ({"activo": user["activo"]} for user in self.users.values() if user["id"] == params[0]),
@@ -180,6 +186,32 @@ class DashboardAppTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.get_json()["channels"][0]["codigo"], "TELEGRAM")
         self.assertTrue(response.get_json()["agents"][0]["activo"])
+
+    def test_internal_gemini_status_requires_bearer_token(self):
+        response = self.client.post(
+            "/internal/gemini-status",
+            json={"status": "quota_exceeded"},
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_internal_gemini_status_records_only_supported_states(self):
+        headers = {"Authorization": "Bearer internal-test-token"}
+        invalid_response = self.client.post(
+            "/internal/gemini-status",
+            headers=headers,
+            json={"status": []},
+        )
+        self.assertEqual(invalid_response.status_code, 400)
+        self.assertIsNone(self.connection.gemini_status)
+
+        response = self.client.post(
+            "/internal/gemini-status",
+            headers=headers,
+            json={"status": "quota_exceeded"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"status": "quota_exceeded"})
+        self.assertEqual(self.connection.gemini_status["status"], "quota_exceeded")
 
     def test_dashboard_renders_metrics_and_agent_summary(self):
         self.login()
@@ -352,6 +384,13 @@ class DashboardAppTests(unittest.TestCase):
             user_session["csrf_token"] = "valid-csrf-token"
         response = self.client.get("/n8n")
         self.assertEqual(response.status_code, 403)
+
+    def test_n8n_page_displays_gemini_quota_notification(self):
+        self.login()
+        self.connection.gemini_status = {"status": "quota_exceeded", "updated_at": None}
+        response = self.client.get("/n8n")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Gemini alcanzó su límite o cuota.".encode(), response.data)
 
     def test_admin_can_activate_configured_workflow(self):
         self.login()

@@ -47,6 +47,7 @@ La aplicación se desplegará en Cloud Run; el servicio n8n requiere por separad
 - `/n8n`: estado y control de activación del workflow; solo el administrador puede usarlo.
 - `/api/dashboard`: métricas JSON, protegidas por la sesión del panel.
 - `/internal/config`: configuración activa para n8n; requiere `Authorization: Bearer <N8N_CONTROL_TOKEN>`.
+- `/internal/gemini-status`: recibe el estado de Gemini del workflow n8n; requiere `Authorization: Bearer <N8N_CONTROL_TOKEN>` y un JSON con `status` igual a `quota_exceeded` o `available`.
 
 El usuario administrador inicia sesión con `DASHBOARD_USERNAME` y `DASHBOARD_PASSWORD` configurados desde Secret Manager. Las cuentas adicionales se guardan en `public.usuarios_panel`; la aplicación genera una contraseña aleatoria y muestra el texto en claro únicamente en la respuesta de creación. La base guarda solo el hash. Estas cuentas pueden consultar casos, pero no administrar usuarios, módulos ni activar/desactivar workflows. Deshabilitar una cuenta revoca su sesión en la siguiente solicitud.
 
@@ -59,6 +60,10 @@ Las métricas “con respuesta” cuentan casos con `respuesta` no vacía; “at
 Los controles del panel guardan `canales.activo` y `agentes.activo` en Supabase. El workflow nuevo lee esos mismos valores antes de procesar canales y niveles de atención, y escribe los casos, mensajes, eventos y ejecuciones usando las columnas de `supabase/schema.sql`. Se retiró el panel separado que estaba embebido en n8n para centralizar autenticación y permisos en Flask; sus endpoints no protegían del lado del servidor las operaciones de configuración/casos. `/internal/config` sigue disponible para integraciones futuras.
 
 El workflow n8n debe permanecer **inactivo hasta probarlo contra PostgreSQL y revisar sus credenciales**. Ejecuta `supabase/schema.sql` en el proyecto correcto y confirma que la credencial `Postgres account` apunta al mismo Supabase. Los controles de canal omiten mensajes de canales inactivos, pero no desactivan físicamente cada trigger: Discord tiene entradas por webhook y sondeo dentro del mismo workflow. El control de `/n8n` activa o desactiva el workflow completo.
+
+Para que el aviso de Gemini funcione, el workflow debe reportar a Flask cuando una llamada falle por límite/cuota agotada y, opcionalmente, reportar `available` después de una llamada exitosa para limpiar el aviso. Añade un nodo HTTP Request en la rama correspondiente, con método `POST`, URL `<URL_BASE_DE_FLASK>/internal/gemini-status`, encabezado `Authorization: Bearer <N8N_CONTROL_TOKEN>`, tipo de contenido JSON y cuerpo `{"status":"quota_exceeded"}` o `{"status":"available"}`. Guarda el token como credencial en n8n; no lo pongas en el cuerpo ni en el repositorio. La página `/n8n` muestra el estado del último reporte. Sin ese nodo, el servicio no puede inferir directamente el límite ni mostrar un estado actualizado.
+
+En una base existente, crea la tabla `public.gemini_api_status` ejecutando el bloque correspondiente de `supabase/schema.sql` en el SQL Editor de Supabase antes de desplegar esta versión.
 
 ## Validación
 

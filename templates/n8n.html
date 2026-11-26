@@ -5,6 +5,19 @@
   <div><p class="eyebrow">ADMINISTRACIÓN</p><h1>Workflow n8n</h1><p class="muted">Solo el administrador puede habilitar o detener el workflow.</p></div>
 </header>
 <section class="panel n8n-panel">
+  <div class="panel-heading"><div><h2>Disponibilidad de Gemini</h2><p class="muted">Estado según el último reporte del workflow.</p></div></div>
+  {% if gemini_status.status == 'quota_exceeded' %}
+    <div class="notice notice-error" role="alert">Gemini alcanzó su límite o cuota. Las ejecuciones que necesiten la API pueden fallar hasta que vuelva a estar disponible.</div>
+  {% elif gemini_status.status == 'available' %}
+    <div class="notice notice-success" role="status">Gemini respondió correctamente en el último reporte.</div>
+  {% else %}
+    <div class="notice" role="status">Todavía no hay reportes de disponibilidad de Gemini. Conecta el workflow con el endpoint de estado para activar este aviso.</div>
+  {% endif %}
+  {% if gemini_status.updated_at %}
+    <p class="muted">Último reporte: {{ gemini_status.updated_at.strftime('%d/%m/%Y %H:%M %Z') }}</p>
+  {% endif %}
+</section>
+<section class="panel n8n-panel">
   <div class="panel-heading"><div><h2>{{ workflow.name if workflow else 'Control de activación' }}</h2><p class="muted">ID: {{ workflow_id or 'No configurado' }}</p></div></div>
   {% if not configured %}
     <div class="notice">Falta configurar <code>N8N_API_BASE_URL</code>, <code>N8N_WORKFLOW_ID</code> y <code>N8N_API_KEY</code> en el servicio web. No se puede cambiar el estado desde aquí.</div>

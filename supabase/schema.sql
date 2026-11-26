@@ -114,6 +114,12 @@ CREATE TABLE IF NOT EXISTS public.eventos_caso (
     creado_en timestamptz NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS public.gemini_api_status (
+    id smallint PRIMARY KEY CHECK (id = 1),
+    status text NOT NULL CHECK (status IN ('available', 'quota_exceeded')),
+    updated_at timestamptz NOT NULL DEFAULT now()
+);
+
 INSERT INTO public.canales (codigo, nombre)
 VALUES
     ('TELEGRAM', 'Telegram'),

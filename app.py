@@ -544,6 +544,13 @@ def create_app(test_config=None):
     @app.get("/n8n")
     @admin_required
     def n8n_workflow():
+        with app.extensions["db_connection"]() as connection:
+            gemini_status = connection.execute(
+                "SELECT status, updated_at FROM public.gemini_api_status WHERE id = 1"
+            ).fetchone()
+        if gemini_status is None:
+            gemini_status = {"status": "unknown", "updated_at": None}
+
         configured = all(
             app.config[key]
             for key in ("N8N_API_BASE_URL", "N8N_WORKFLOW_ID", "N8N_API_KEY")
@@ -561,6 +568,7 @@ def create_app(test_config=None):
             configured=configured,
             workflow=workflow,
             workflow_id=app.config["N8N_WORKFLOW_ID"],
+            gemini_status=gemini_status,
             csrf_token=session["csrf_token"],
         )
 
@@ -625,6 +633,30 @@ def create_app(test_config=None):
             channels=[dict(row) for row in channels],
             agents=[dict(row) for row in agents],
         )
+
+    @app.post("/internal/gemini-status")
+    def internal_gemini_status():
+        expected_token = app.config["N8N_CONTROL_TOKEN"]
+        provided_token = request.headers.get("Authorization", "").removeprefix("Bearer ").strip()
+        if not expected_token or not hmac.compare_digest(provided_token, expected_token):
+            return jsonify(error="No autorizado."), 401
+
+        payload = request.get_json(silent=True)
+        status = payload.get("status") if isinstance(payload, dict) else None
+        if not isinstance(status, str) or status not in {"available", "quota_exceeded"}:
+            return jsonify(error="Estado de Gemini no válido."), 400
+
+        with app.extensions["db_connection"]() as connection:
+            connection.execute(
+                """
+                INSERT INTO public.gemini_api_status (id, status, updated_at)
+                VALUES (1, %s, now())
+                ON CONFLICT (id) DO UPDATE
+                SET status = EXCLUDED.status, updated_at = now()
+                """,
+                (status,),
+            )
+        return jsonify(status=status)
 
     return app
 
